@@ -5,8 +5,8 @@
  * Este archivo genera automáticamente el código JavaScript del decoder
  * para The Things Network (TTN) basado en los sensores configurados.
  *
- * @author    Proyecto IoT de Bajo Consumo
- * @version   1.0
+ * @author    Boya Marítima V2 - Medialab Uniovi
+ * @version   2.0
  * @date      2025
  */
 
@@ -48,42 +48,76 @@ static void print_decoder_header() {
 }
 
 /**
- * @brief Imprime el código para decodificar temperatura
+ * @brief Imprime el código para decodificar batería (primer byte)
  */
-static void print_temperature_decoder() {
-    Serial.println(F("  // Temperatura (°C * 100)"));
-    Serial.println(F("  data.temperatura = ((bytes[offset++] << 8) | bytes[offset++]) / 100.0;"));
+static void print_battery_percent_decoder() {
+    Serial.println(F("  // Byte 0: Batería en porcentaje (0-100%)"));
+    Serial.println(F("  data.battery_percent = bytes[offset++];"));
+    Serial.println(F(""));
+}
+
+/**
+ * @brief Imprime el código para decodificar pH
+ */
+static void print_ph_decoder() {
+    Serial.println(F("  // Byte 1-2: pH (x100) - Little-endian"));
+    Serial.println(F("  var ph_raw = bytes[offset++] | (bytes[offset++] << 8);"));
+    Serial.println(F("  data.ph = ph_raw / 100.0;"));
+    Serial.println(F(""));
+}
+
+/**
+ * @brief Imprime el código para decodificar temperatura exterior
+ */
+static void print_temperature_ext_decoder() {
+    Serial.println(F("  // Byte 3-4: Temperatura exterior BME280 (°C * 100) - Little-endian"));
+    Serial.println(F("  var temp_ext_raw = bytes[offset++] | (bytes[offset++] << 8);"));
+    Serial.println(F("  data.temperature_ext = temp_ext_raw / 100.0;"));
+    Serial.println(F(""));
+}
+
+/**
+ * @brief Imprime el código para decodificar temperatura del agua
+ */
+static void print_temperature_water_decoder() {
+    Serial.println(F("  // Byte 5-6: Temperatura agua 1m DS18B20 (°C * 100) - Little-endian"));
+    Serial.println(F("  var temp_water_raw = bytes[offset++] | (bytes[offset++] << 8);"));
+    Serial.println(F("  data.temperature_water_1m = temp_water_raw / 100.0;"));
+    Serial.println(F(""));
 }
 
 /**
  * @brief Imprime el código para decodificar humedad
  */
 static void print_humidity_decoder() {
-    Serial.println(F("  // Humedad (% * 100)"));
-    Serial.println(F("  data.humedad = ((bytes[offset++] << 8) | bytes[offset++]) / 100.0;"));
+    Serial.println(F("  // Byte 7-8: Humedad BME280 (% * 100) - Little-endian"));
+    Serial.println(F("  var humidity_raw = bytes[offset++] | (bytes[offset++] << 8);"));
+    Serial.println(F("  data.humidity = humidity_raw / 100.0;"));
+    Serial.println(F(""));
 }
 
 /**
  * @brief Imprime el código para decodificar presión
  */
 static void print_pressure_decoder() {
-    Serial.println(F("  // Presión atmosférica (hPa * 10)"));
-    Serial.println(F("  data.presion = ((bytes[offset++] << 8) | bytes[offset++]) / 10.0;"));
+    Serial.println(F("  // Byte 9-10: Presión atmosférica BME280 (hPa * 10) - Little-endian"));
+    Serial.println(F("  var pressure_raw = bytes[offset++] | (bytes[offset++] << 8);"));
+    Serial.println(F("  data.pressure = pressure_raw / 10.0;"));
+    Serial.println(F(""));
 }
 
 /**
- * @brief Imprime el código para decodificar batería
+ * @brief Imprime validación del tamaño del payload
  */
-static void print_battery_decoder() {
-    Serial.println(F(""));
-#ifdef BATTERY_AS_PERCENTAGE
-    Serial.println(F("  // Batería en porcentaje (0-100%) - Último byte"));
-    Serial.println(F("  data.bateria = bytes[bytes.length - 1];"));
-#else
-    Serial.println(F("  // Batería en voltaje (V * 100) - Últimos 2 bytes"));
-    Serial.println(F("  var batteryIndex = bytes.length - 2;"));
-    Serial.println(F("  data.bateria = ((bytes[batteryIndex] << 8) | bytes[batteryIndex + 1]) / 100.0;"));
-#endif
+static void print_payload_validation() {
+    Serial.println(F("  // Validar tamaño del payload (12 bytes esperados)"));
+    Serial.println(F("  if (bytes.length !== 12) {"));
+    Serial.println(F("    return {"));
+    Serial.println(F("      data: data,"));
+    Serial.println(F("      warnings: ['Payload size should be 12 bytes, got ' + bytes.length],"));
+    Serial.println(F("      errors: []"));
+    Serial.println(F("    };"));
+    Serial.println(F("  }"));
     Serial.println(F(""));
 }
 
@@ -102,14 +136,18 @@ static void print_decoder_footer() {
  * @brief Imprime información sobre la configuración actual
  */
 static void print_configuration_info() {
-    Serial.println(F("=== CONFIGURACIÓN ACTUAL DE SENSORES ==="));
+    Serial.println(F(""));
+    Serial.println(F("=== CONFIGURACIÓN BOYA MARÍTIMA V2 ==="));
 
-    Serial.print(F("Sensor activo: "));
-
+    Serial.println(F("Sensores activos:"));
 #ifdef ENABLE_SENSOR_BME280
-    Serial.print(F("BME280"));
-#else
-    Serial.print(F("NINGUNO (solo batería)"));
+    Serial.println(F("  ✓ BME280 (Temperatura exterior, Humedad, Presión)"));
+#endif
+#ifdef ENABLE_SENSOR_DS18B20
+    Serial.println(F("  ✓ DS18B20 (Temperatura agua 1m)"));
+#endif
+#ifdef ENABLE_SENSOR_PH
+    Serial.println(F("  ✓ DFRobot pH (pH del agua)"));
 #endif
 
     Serial.println(F(""));
@@ -118,16 +156,14 @@ static void print_configuration_info() {
     uint8_t payload_size = PAYLOAD_SIZE_BYTES;
     Serial.printf("Tamaño del payload: %d bytes\r\n", payload_size);
 
-    // Información sobre qué campos están incluidos
-    Serial.println(F("Campos incluidos en el payload:"));
-    if (SYSTEM_HAS_TEMPERATURE) Serial.println(F("  ✓ Temperatura (2 bytes)"));
-    if (SYSTEM_HAS_HUMIDITY) Serial.println(F("  ✓ Humedad (2 bytes)"));
-    if (SYSTEM_HAS_PRESSURE) Serial.println(F("  ✓ Presión atmosférica (2 bytes)"));
-#ifdef BATTERY_AS_PERCENTAGE
-    Serial.println(F("  ✓ Batería (1 byte - porcentaje 0-100%)"));
-#else
-    Serial.println(F("  ✓ Batería (2 bytes - voltaje)"));
-#endif
+    // Información sobre estructura del payload
+    Serial.println(F("Estructura del payload (12 bytes):"));
+    Serial.println(F("  Byte 0:      Batería (%)"));
+    Serial.println(F("  Byte 1-2:    pH (x100) - Little-endian"));
+    Serial.println(F("  Byte 3-4:    Temperatura exterior (x100) - Little-endian"));
+    Serial.println(F("  Byte 5-6:    Temperatura agua 1m (x100) - Little-endian"));
+    Serial.println(F("  Byte 7-8:    Humedad (x100) - Little-endian"));
+    Serial.println(F("  Byte 9-10:   Presión (x10) - Little-endian"));
 
     Serial.println(F(""));
 }
@@ -146,21 +182,30 @@ void generate_and_print_ttn_decoder() {
 
     print_configuration_info();
     print_decoder_header();
+    print_payload_validation();
 
-    // Generar el código de decodificación según los sensores activos
-    if (SYSTEM_HAS_TEMPERATURE) {
-        print_temperature_decoder();
-    }
+    // Generar el código de decodificación para Boya Marítima V2
+    // Payload: Battery(1) + pH(2) + TempExt(2) + Temp1m(2) + Humidity(2) + Pressure(2) = 12 bytes
+    
+    print_battery_percent_decoder();
+    
+#ifdef ENABLE_SENSOR_PH
+    print_ph_decoder();
+#endif
 
-    if (SYSTEM_HAS_HUMIDITY) {
-        print_humidity_decoder();
-    }
+#ifdef ENABLE_SENSOR_BME280
+    print_temperature_ext_decoder();
+#endif
 
-    if (SYSTEM_HAS_PRESSURE) {
-        print_pressure_decoder();
-    }
+#ifdef ENABLE_SENSOR_DS18B20
+    print_temperature_water_decoder();
+#endif
 
-    print_battery_decoder();
+#ifdef ENABLE_SENSOR_BME280
+    print_humidity_decoder();
+    print_pressure_decoder();
+#endif
+
     print_decoder_footer();
 }
 
@@ -176,43 +221,53 @@ uint16_t generate_ttn_decoder_string(char* buffer, uint16_t max_size) {
 
     uint16_t offset = 0;
 
-    // Header básico
+    // Header
     offset += snprintf(buffer + offset, max_size - offset,
         "function decodeUplink(input) {\n"
         "  var data = {};\n"
         "  var bytes = input.bytes;\n"
-        "  var offset = 0;\n\n");
-
-    // Campos de sensores
-    if (SYSTEM_HAS_TEMPERATURE) {
-        offset += snprintf(buffer + offset, max_size - offset,
-            "  data.temperatura = ((bytes[offset++] << 8) | bytes[offset++]) / 100.0;\n");
-    }
-
-    if (SYSTEM_HAS_HUMIDITY) {
-        offset += snprintf(buffer + offset, max_size - offset,
-            "  data.humedad = ((bytes[offset++] << 8) | bytes[offset++]) / 100.0;\n");
-    }
-
-    if (SYSTEM_HAS_PRESSURE) {
-        offset += snprintf(buffer + offset, max_size - offset,
-            "  data.presion = ((bytes[offset++] << 8) | bytes[offset++]) / 10.0;\n");
-    }
+        "  var offset = 0;\n\n"
+        "  if (bytes.length !== 12) {\n"
+        "    return { data: data, warnings: ['Payload size should be 12 bytes'], errors: [] };\n"
+        "  }\n\n");
 
     // Batería
     offset += snprintf(buffer + offset, max_size - offset,
-        "\n");
-#ifdef BATTERY_AS_PERCENTAGE
+        "  data.battery_percent = bytes[offset++];\n");
+
+    // pH
+#ifdef ENABLE_SENSOR_PH
     offset += snprintf(buffer + offset, max_size - offset,
-        "  data.bateria = bytes[bytes.length - 1];\n");
-#else
-    offset += snprintf(buffer + offset, max_size - offset,
-        "  var batteryIndex = bytes.length - 2;\n"
-        "  data.bateria = ((bytes[batteryIndex] << 8) | bytes[batteryIndex + 1]) / 100.0;\n");
+        "  var ph_raw = bytes[offset++] | (bytes[offset++] << 8);\n"
+        "  data.ph = ph_raw / 100.0;\n");
 #endif
+
+    // Temperatura exterior BME280
+#ifdef ENABLE_SENSOR_BME280
     offset += snprintf(buffer + offset, max_size - offset,
-        "\n"
-        "  return { data: data };\n"
+        "  var temp_ext_raw = bytes[offset++] | (bytes[offset++] << 8);\n"
+        "  data.temperature_ext = temp_ext_raw / 100.0;\n");
+#endif
+
+    // Temperatura agua DS18B20
+#ifdef ENABLE_SENSOR_DS18B20
+    offset += snprintf(buffer + offset, max_size - offset,
+        "  var temp_water_raw = bytes[offset++] | (bytes[offset++] << 8);\n"
+        "  data.temperature_water_1m = temp_water_raw / 100.0;\n");
+#endif
+
+    // Humedad y presión BME280
+#ifdef ENABLE_SENSOR_BME280
+    offset += snprintf(buffer + offset, max_size - offset,
+        "  var humidity_raw = bytes[offset++] | (bytes[offset++] << 8);\n"
+        "  data.humidity = humidity_raw / 100.0;\n"
+        "  var pressure_raw = bytes[offset++] | (bytes[offset++] << 8);\n"
+        "  data.pressure = pressure_raw / 10.0;\n");
+#endif
+
+    // Footer
+    offset += snprintf(buffer + offset, max_size - offset,
+        "\n  return { data: data, warnings: [], errors: [] };\n"
         "}\n");
 
     return offset;
