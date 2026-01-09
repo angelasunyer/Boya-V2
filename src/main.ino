@@ -29,6 +29,9 @@
 #include "LoRaBoards.h"   // Configuración de hardware y pines
 #include "screen.h"       // Gestión de pantalla
 #include "ttn_decoder_generator.h"  // Generador de decoders TTN
+#ifdef ENABLE_SENSOR_PH
+#include "sensor_interface.h" // Para `sensor_ph_process_serial()`
+#endif
 #include <esp_task_wdt.h> // Watchdog timer para protección contra cuelgues
 
 /**
@@ -69,6 +72,12 @@ void loop()
 {
     loopLMIC();     // Procesa eventos LoRaWAN y gestiona el ciclo de bajo consumo
     updateDisplay(); // Gestiona la pantalla y mensajes
+
+#ifdef ENABLE_SENSOR_PH
+    // Permitir calibración por Serial (ENTERPH / CALPH / EXITPH)
+    sensor_ph_process_serial();
+#endif
+
     esp_task_wdt_reset(); // Alimentar watchdog para indicar actividad
 }
 

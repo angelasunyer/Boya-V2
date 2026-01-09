@@ -182,4 +182,30 @@ void sensor_ph_set_available_for_testing(bool available) {
     Serial.printf("TESTING: Sensor pH forzado a %s\n", available ? "disponible" : "no disponible");
 }
 
+/**
+ * @brief Procesa entrada por Serial para la calibración del sensor pH
+ *
+ * Llama a la función de calibración de la librería DFRobot_PH pasando una
+ * lectura rápida de tensión y la temperatura actual. La librería internamente
+ * procesa comandos como ENTERPH / CALPH / EXITPH enviados por el usuario.
+ * Esta función debe ejecutarse frecuentemente (por ejemplo, desde loop()).
+ */
+void sensor_ph_process_serial(void) {
+    if (!sensor_available) return;
+    // Si no hay datos por Serial, no hacemos nada
+    if (Serial.available() == 0) return;
+
+    // Asegurar alimentación del sensor y hacer una lectura rápida
+    sensor_ph_power_on();
+    uint32_t raw = analogRead(PH_ANALOG_PIN);
+    // Convertir a voltaje usando la misma fórmula que read_ph_value()
+    float voltage = (raw / PH_ADC_RESOLUTION) * PH_REFERENCE_VOLTAGE;
+
+    // Pasar la tensión y la temperatura a la librería; ésta procesará los comandos
+    ph_sensor.calibration(voltage, temperature);
+
+    // Apagar la alimentación tras la operación rápida
+    sensor_ph_power_off();
+}
+
 #endif // ENABLE_SENSOR_PH

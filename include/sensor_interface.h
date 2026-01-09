@@ -172,6 +172,14 @@ void sensor_ph_set_available_for_testing(bool available);
 void sensor_ph_set_temperature(float temp);
 
 /**
+ * @brief Procesa comandos de calibración de pH recibidos por Serial
+ *
+ * Debe ser llamado periódicamente desde el bucle principal para permitir
+ * que la librería DFRobot_PH escuche comandos como ENTERPH, CALPH y EXITPH.
+ */
+void sensor_ph_process_serial(void);
+
+/**
  * @brief Inicializa el sensor BME280
  */
 bool sensor_bme280_init(void);
